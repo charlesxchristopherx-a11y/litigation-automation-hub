@@ -1,0 +1,102 @@
+name: Monthly public repository mirrors
+
+on:
+  schedule:
+    - cron: "0 3 1 * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Build full public repository mirrors
+        id: build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: charlesxchristopherx-a11y
+        run: |
+          set -u -o pipefail
+          run_date=$(TZ=America/New_York date +%F)
+          run_utc=$(date -u +%FT%TZ)
+          run_et=$(TZ=America/New_York date "+%F %T %Z")
+          echo "run_date=$run_date" >> "$GITHUB_OUTPUT"
+          mkdir -p output work
+
+          gh api --paginate "/users/$OWNER/repos?per_page=100&type=owner&sort=full_name" \
+            --jq '.[] | select(.private == false) | .name' | sort -fu > public-repos.txt
+
+          expected=$(wc -l < public-repos.txt | tr -d ' ')
+          failures=0
+          {
+            echo "run date | $run_date"
+            echo "run start UTC | $run_utc"
+            echo "run start America/New_York | $run_et"
+            echo "expected repository count | $expected"
+            echo
+            echo "repo name | visibility | last push | mirror clone ok | tar.gz size bytes | SHA-256 | notes"
+          } > "output/public-backup-manifest-$run_date.txt"
+
+          while IFS= read -r repo; do
+            case "$repo" in
+              *[!A-Za-z0-9._-]*|'')
+                echo "$repo | public | unknown | no | 0 | n/a | invalid repository name" >> "output/public-backup-manifest-$run_date.txt"
+                failures=$((failures + 1))
+                continue
+                ;;
+            esac
+
+            mirror="work/$repo.git"
+            archive="output/$repo-backup-$run_date.tar.gz"
+            last_push=$(gh api "/repos/$OWNER/$repo" --jq '.pushed_at' 2>/dev/null || echo "unknown")
+
+            if ! git clone --mirror "https://github.com/$OWNER/$repo.git" "$mirror"; then
+              echo "$repo | public | $last_push | no | 0 | n/a | mirror clone failed" >> "output/public-backup-manifest-$run_date.txt"
+              failures=$((failures + 1))
+              continue
+            fi
+
+            git -C "$mirror" remote set-url origin "https://github.com/$OWNER/$repo.git"
+            if ! tar -czf "$archive" -C work "$repo.git"; then
+              echo "$repo | public | $last_push | yes | 0 | n/a | archive failed" >> "output/public-backup-manifest-$run_date.txt"
+              failures=$((failures + 1))
+              continue
+            fi
+
+            bytes=$(stat -c %s "$archive")
+            digest=$(sha256sum "$archive" | awk '{print $1}')
+            echo "$repo | public | $last_push | yes | $bytes | $digest | ready for Drive upload" >> "output/public-backup-manifest-$run_date.txt"
+          done < public-repos.txt
+
+          actual=$(find output -maxdepth 1 -type f -name "*-backup-$run_date.tar.gz" | wc -l | tr -d ' ')
+          {
+            echo
+            echo "archives created | $actual"
+            echo "failures | $failures"
+          } >> "output/public-backup-manifest-$run_date.txt"
+
+          if [ "$actual" -ne "$expected" ]; then
+            failures=$((failures + 1))
+          fi
+          echo "failure_count=$failures" >> "$GITHUB_OUTPUT"
+
+      - name: Upload public mirror bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-mirrors-${{ steps.build.outputs.run_date }}
+          path: output/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Enforce complete public coverage
+        shell: bash
+        run: |
+          test "${{ steps.build.outputs.failure_count }}" = "0"
