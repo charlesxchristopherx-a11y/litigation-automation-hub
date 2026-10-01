@@ -1,0 +1,12 @@
+{
+  "name": "pla-litigation-automation-hub",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "node src/validate-config.mjs config/tracking.example.json"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
