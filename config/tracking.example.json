@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "timezone": "America/New_York",
+  "spreadsheetIdEnv": "PLA_MASTER_TRACKER_ID",
+  "requiredSheets": [
+    "DASHBOARD",
+    "CASES",
+    "UPCOMING DEADLINES",
+    "DOCKET HISTORY",
+    "ALERTS GENERATED",
+    "CASE INVENTORY",
+    "EXCEPTIONS",
+    "SYNC LOG",
+    "FILING MAILING WATCH",
+    "SOURCE MAPPINGS",
+    "Leads",
+    "Contacts",
+    "Follow-Ups",
+    "Activity Log",
+    "Intake Records",
+    "Lists & Rules"
+  ],
+  "automations": [
+    {
+      "key": "weekday-operations",
+      "owner": "ChatGPT",
+      "schedule": "Monday-Friday 08:00 America/New_York"
+    },
+    {
+      "key": "weekly-case-status",
+      "owner": "ChatGPT",
+      "schedule": "Sunday 18:00 America/New_York"
+    },
+    {
+      "key": "capture-new-leads",
+      "owner": "ChatGPT",
+      "schedule": "event-driven"
+    }
+  ],
+  "forbiddenDependencies": [
+    "zo.computer",
+    "zo.space"
+  ]
+}
